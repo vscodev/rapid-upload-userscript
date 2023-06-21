@@ -1,0 +1,29 @@
+#rapid-upload-button {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    vertical-align: middle;
+    font: inherit;
+    overflow: visible;
+    text-transform: none;
+    font-family: SFUIText,PingFangSC-Regular,Helvetica Neue,Helvetica,Arial,sans-serif;
+    -webkit-user-select: none;
+    display: inline-block;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-appearance: none;
+    text-align: center;
+    box-sizing: border-box;
+    outline: 0;
+    margin: 0 16px;
+    transition: .1s;
+    color: #fff;
+    background-color: #06a7ff;
+    font-weight: 700;
+    padding: 8px 24px;
+    height: 32px;
+    font-size: 14px;
+    border-radius: 16px;
+    border: none;
+}
