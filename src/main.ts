@@ -92,7 +92,7 @@ function doRapidUpload(targetPath: string, fi: FileInfo): Promise<void> {
   return new Promise((resolve, reject) => {
     GM_xmlhttpRequest({
       method: "POST",
-      url: "https://pan.baidu.com/api/precreate??app_id=250528&clienttype=21",
+      url: "https://pan.baidu.com/api/precreate?app_id=250528&clienttype=21",
       data: `path=${encodeURIComponent(targetPath + "/" + fi.path)}&size=${
         fi.size
       }&isdir=0&block_list=${JSON.stringify(
@@ -135,12 +135,12 @@ async function newRapidUploadTask() {
     input: "textarea",
     inputPlaceholder:
       "请输入标准格式的秒传提取码，支持批量转存，多个链接以换行符分隔。",
-    preConfirm: (value: string) => {
-      const result = parseRapidUploadLinks(value);
-      if (result.length === 0) {
+    preConfirm: (inputValue: string) => {
+      const fileList = parseRapidUploadLinks(inputValue);
+      if (fileList.length === 0) {
         Swal.showValidationMessage(`未检测到有效的的秒传链接`);
       }
-      return result;
+      return fileList;
     },
     showCancelButton: true,
     confirmButtonText: "确定",
@@ -169,7 +169,8 @@ async function newRapidUploadTask() {
             try {
               await doRapidUpload(targetPath, fi);
               successCount++;
-            } catch {
+            } catch (err) {
+              console.error(err);
               failureCount++;
             }
           }
