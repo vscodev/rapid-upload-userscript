@@ -1,7 +1,9 @@
 import "./style.css";
 import Swal from "sweetalert2";
-import { GM_xmlhttpRequest } from "$";
-import { FileInfo, LoginResponse, RapidUploadResponse } from "./types";
+import { FileInfo } from "./types";
+import { ApiError, checkLogin, doRapidUpload } from "./api";
+
+const MAX_ATTEMPTS = 3;
 
 function parseRapidUploadLinks(inputValue: string): FileInfo[] {
   return inputValue
@@ -23,110 +25,59 @@ function parseRapidUploadLinks(inputValue: string): FileInfo[] {
     }, []);
 }
 
-// https://pan.baidu.com/union/doc/okumlx17r
-function getErrorMessage(errrno: number): string {
-  switch (errrno) {
-    case 0:
-      return "请求成功";
-    case 2:
-    case 31023:
-      return "参数错误";
-    case 111:
-      return "access token 失效";
-    case -6:
-      return "身份验证失败";
-    case 6:
-      return "不允许接入用户数据";
-    case 31034:
-      return "命中接口频控";
-    case 2131:
-      return "该分享不存在";
-    case 10:
-      return "转存文件已经存在";
-    case -3:
-    case -31066:
-      return "文件不存在";
-    case 11:
-      return "自己发送的分享";
-    case 255:
-      return "转存数量太多";
-    case 12:
-      return "批量转存出错";
-    case -1:
-      return "权益已过期";
-    case -7:
-      return "文件或目录名错误或无权访问";
-    case -10:
-      return "容量不足";
-    default:
-      return "未知错误";
-  }
-}
-
-function checkLogin(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    GM_xmlhttpRequest({
-      method: "GET",
-      url: "https://pan.baidu.com/api/loginStatus?clienttype=0&app_id=250528&web=1&channel=chunlei",
-      responseType: "json",
-      onload: (result) => {
-        const resp = result.response as LoginResponse;
-        if (resp.errno === 0) {
-          resolve();
-        } else {
-          reject(
-            new Error(
-              `获取用户登录状态失败，错误码：${resp.errno}（${resp.show_msg}）`
-            )
-          );
-        }
-      },
-      onerror: (err) => {
-        reject(err);
-      },
-    });
-  });
-}
-
-function doRapidUpload(targetPath: string, fi: FileInfo): Promise<void> {
-  return new Promise((resolve, reject) => {
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: "https://pan.baidu.com/api/precreate?app_id=250528&clienttype=21",
-      data: `path=${encodeURIComponent(targetPath + "/" + fi.path)}&size=${
-        fi.size
-      }&isdir=0&block_list=${JSON.stringify(
-        fi.blockList.map((v) => v.toLowerCase())
-      )}&autoinit=1&content-md5=${fi.contentMd5.toLowerCase()}&slice-md5=${fi.sliceMd5.toLowerCase()}&rtype=2`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      responseType: "json",
-      onload: (result) => {
-        const resp = result.response as RapidUploadResponse;
-        if (resp.errno === 0) {
-          if (resp.return_type === 2) {
-            resolve();
-          } else {
-            reject(new Error("秒传未生效"));
-          }
-        } else {
-          reject(new Error(getErrorMessage(resp.errno)));
-        }
-      },
-      onerror: (err) => {
-        reject(err);
-      },
-    });
-  });
-}
-
 function getCurrentPath(): string {
   const matched = location.href.match(/path=(.+?)(?:&|$)/);
   if (matched) {
     return decodeURIComponent(matched[1]);
   }
   return "";
+}
+
+function randomizeTextCase(text: string): string {
+  let ret = "";
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i].toLowerCase();
+    if (Math.random() < 0.5) {
+      ret += char;
+    } else {
+      ret += char.toUpperCase();
+    }
+  }
+  return ret;
+}
+
+function sleep(ms = 300): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRandomIntInclusive(min: number, max: number) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1) + min); // The maximum is inclusive and the minimum is inclusive
+}
+
+async function tryRapidUpload(
+  targetPath: string,
+  fi: FileInfo,
+  attempts: number
+) {
+  fi.contentMd5 =
+    attempts === 0
+      ? fi.contentMd5.toLowerCase()
+      : randomizeTextCase(fi.contentMd5);
+  try {
+    await doRapidUpload(targetPath, fi);
+  } catch (err) {
+    if (
+      err instanceof ApiError &&
+      err.code === 404 &&
+      attempts < MAX_ATTEMPTS
+    ) {
+      await sleep(getRandomIntInclusive(300, 1000));
+      return tryRapidUpload(targetPath, fi, ++attempts);
+    }
+    throw err;
+  }
 }
 
 async function newRapidUploadTask() {
@@ -167,7 +118,7 @@ async function newRapidUploadTask() {
             }
 
             try {
-              await doRapidUpload(targetPath, fi);
+              await tryRapidUpload(targetPath, fi, 0);
               successCount++;
             } catch (err) {
               console.error(err);
